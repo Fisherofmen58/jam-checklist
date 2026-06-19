@@ -723,27 +723,38 @@ async function fetchKP() {
   try {
     const res = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
     const data = await res.json();
-    const latest = data[data.length - 1];
-    return parseFloat(latest[1]);
+    // Skip header row, find last row with a valid numeric value
+    for (let i = data.length - 1; i >= 1; i--) {
+      const val = parseFloat(data[i][1]);
+      if (!isNaN(val)) return val;
+    }
+    return null;
   } catch { return null; }
 }
 
 async function fetchMetar(lat, lon) {
   try {
-    const stationRes = await fetch(`https://aviationweather.gov/api/data/station?bbox=${lat-1},${lon-1},${lat+1},${lon+1}&format=json`);
-    if (!stationRes.ok) return null;
-    const stations = await stationRes.json();
-    if (!stations || stations.length === 0) return null;
-    let closest = null, minDist = Infinity;
-    for (const s of stations) {
-      const d = Math.hypot(s.lat - lat, s.lon - lon);
-      if (d < minDist) { minDist = d; closest = s; }
+    // Try expanding radius up to 3 degrees to find a station
+    for (const r of [1, 2, 3]) {
+      const stationRes = await fetch(`https://aviationweather.gov/api/data/station?bbox=${lat-r},${lon-r},${lat+r},${lon+r}&format=json`);
+      if (!stationRes.ok) continue;
+      const stations = await stationRes.json();
+      if (!stations || stations.length === 0) continue;
+      let closest = null, minDist = Infinity;
+      for (const s of stations) {
+        if (!s.lat || !s.lon) continue;
+        const d = Math.hypot(s.lat - lat, s.lon - lon);
+        if (d < minDist) { minDist = d; closest = s; }
+      }
+      if (!closest) continue;
+      const id = closest.stationIdentifier || closest.icaoId;
+      if (!id) continue;
+      const metarRes = await fetch(`https://aviationweather.gov/api/data/metar?ids=${id}&format=json&taf=false`);
+      if (!metarRes.ok) continue;
+      const metars = await metarRes.json();
+      if (metars && metars.length > 0) return { metar: metars[0], station: id };
     }
-    if (!closest) return null;
-    const metarRes = await fetch(`https://aviationweather.gov/api/data/metar?ids=${closest.stationIdentifier}&format=json&taf=false`);
-    if (!metarRes.ok) return null;
-    const metars = await metarRes.json();
-    return metars && metars.length > 0 ? { metar: metars[0], station: closest.stationIdentifier } : null;
+    return null;
   } catch (e) {
     console.warn('METAR fetch failed:', e);
     return null;
