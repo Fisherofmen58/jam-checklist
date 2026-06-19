@@ -193,7 +193,7 @@
   <div class="header-top">
     <div>
       <h1>Johnston Aerial</h1>
-      <p>Mission Flight Checklists · Part 107 Certified · v1.2</p>
+      <p>Mission Flight Checklists · Part 107 Certified · v1.3</p>
     </div>
     <button class="reset-all" onclick="resetCurrent()">Reset</button>
   </div>
@@ -734,52 +734,37 @@ async function fetchKP() {
   } catch { return null; }
 }
 
+const CHECKWX_KEY = '86cfb5b4723c4046bb3f598777eadfc0';
+
 async function fetchMetar(lat, lon) {
   try {
-    // Direct station lookup — hardcoded NC area stations as primary approach
-    const fallbackRes = await fetch('https://aviationweather.gov/api/data/metar?ids=KJNX,KFAY,KRDU,KFQD&format=json&taf=false&hours=2');
-    if (fallbackRes.ok) {
-      const fallbacks = await fallbackRes.json();
-      if (fallbacks && fallbacks.length > 0) {
-        // Just use the first one with cloud data
-        for (const m of fallbacks) {
-          if (m.clouds && m.clouds.length > 0) {
-            return { metar: m, station: m.stationId || m.icaoId || 'KJNX' };
-          }
-        }
-        // No cloud data but still return first result
-        return { metar: fallbacks[0], station: fallbacks[0].stationId || fallbacks[0].icaoId || 'KJNX' };
-      }
-    }
+    const res = await fetch(`https://api.checkwx.com/metar/lat/${lat}/lon/${lon}/decoded`, {
+      headers: { 'X-API-Key': CHECKWX_KEY }
+    });
+    if (!res.ok) throw new Error('CheckWX error: ' + res.status);
+    const data = await res.json();
+    if (!data.data || data.data.length === 0) return null;
+    const m = data.data[0];
+    return { metar: m, station: m.icao || '?' };
   } catch (e) {
-    console.warn('METAR station lookup failed:', e.message);
+    console.warn('CheckWX METAR failed:', e.message);
+    return null;
   }
-
-  try {
-    // Bbox fallback
-    const bbox = `${lon-2},${lat-2},${lon+2},${lat+2}`;
-    const bboxRes = await fetch(`https://aviationweather.gov/api/data/metar?bbox=${bbox}&format=json&taf=false&hours=2`);
-    if (bboxRes.ok) {
-      const metars = await bboxRes.json();
-      if (metars && metars.length > 0) {
-        return { metar: metars[0], station: metars[0].stationId || metars[0].icaoId || '?' };
-      }
-    }
-  } catch (e) {
-    console.warn('METAR bbox failed:', e.message);
-  }
-
-  return null;
 }
 
 function parseCeiling(metar) {
-  // Find lowest BKN or OVC layer
+  // CheckWX provides a direct ceiling field
+  if (metar.ceiling && metar.ceiling.feet_agl != null) {
+    return metar.ceiling.feet_agl;
+  }
+  // Fallback: scan clouds for lowest BKN or OVC
   const clouds = metar.clouds || [];
   let ceiling = null;
   for (const layer of clouds) {
-    if (layer.cover === 'BKN' || layer.cover === 'OVC') {
-      const altFt = layer.base * 100;
-      if (ceiling === null || altFt < ceiling) ceiling = altFt;
+    const cover = layer.code || layer.cover;
+    const base = layer.base_feet_agl || (layer.base ? layer.base * 100 : null);
+    if ((cover === 'BKN' || cover === 'OVC') && base != null) {
+      if (ceiling === null || base < ceiling) ceiling = base;
     }
   }
   return ceiling;
@@ -792,17 +777,23 @@ function ceilingColor(ft) {
   return 'wx-good';
 }
 
-function ceilingText(ft, clouds) {
+function ceilingText(ft, metar) {
   if (ft === null) {
-    // Check if truly clear or just no ceiling layers
-    const hasClouds = clouds && clouds.some(c => c.cover !== 'CLR' && c.cover !== 'SKC' && c.cover !== 'NSC');
+    const clouds = metar?.clouds || [];
+    const hasClouds = clouds.some(c => {
+      const cover = c.code || c.cover;
+      return cover !== 'CLR' && cover !== 'SKC' && cover !== 'NSC' && cover !== 'CAVOK';
+    });
     return hasClouds ? 'No ceiling' : 'Clear';
   }
   return ft.toLocaleString() + ' ft AGL';
 }
 
-function ceilingNote(ft, clouds) {
-  if (ft === null) return clouds && clouds.length > 0 ? (clouds[0].cover || 'Clear') : 'Clear skies';
+function ceilingNote(ft, metar) {
+  if (ft === null) {
+    const clouds = metar?.clouds || [];
+    return clouds.length > 0 ? (clouds[0].text || clouds[0].cover || 'Clear') : 'Clear skies';
+  }
   if (ft < 500) return '⛔ Cannot fly — below minimums';
   if (ft < 1000) return '⚠️ Very low — use caution';
   if (ft < 3000) return 'Low ceiling — check waiver';
@@ -850,8 +841,8 @@ async function loadWeather() {
         stationId = metarData2.station;
         const m = metarData2.metar;
         ceilFt = parseCeiling(m);
-        ceilTxt = ceilingText(ceilFt, m.clouds);
-        ceilNote = ceilingNote(ceilFt, m.clouds);
+        ceilTxt = ceilingText(ceilFt, m);
+        ceilNote = ceilingNote(ceilFt, m);
         ceilClass = ceilingColor(ceilFt);
       }
 
