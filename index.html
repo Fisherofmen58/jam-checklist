@@ -193,7 +193,7 @@
   <div class="header-top">
     <div>
       <h1>Johnston Aerial</h1>
-      <p>Mission Flight Checklists · Part 107 Certified · v1.1</p>
+      <p>Mission Flight Checklists · Part 107 Certified · v1.2</p>
     </div>
     <button class="reset-all" onclick="resetCurrent()">Reset</button>
   </div>
@@ -736,46 +736,40 @@ async function fetchKP() {
 
 async function fetchMetar(lat, lon) {
   try {
-    // 1. Try bbox search with expanding radius
-    for (const r of [1, 2, 3]) {
-      try {
-        const bbox = `${lon-r},${lat-r},${lon+r},${lat+r}`;
-        const bboxRes = await fetch(`https://aviationweather.gov/api/data/metar?bbox=${bbox}&format=json&taf=false&hours=2`);
-        if (!bboxRes.ok) continue;
-        const metars = await bboxRes.json();
-        if (!metars || metars.length === 0) continue;
-        let closest = null, minDist = Infinity;
-        for (const m of metars) {
-          const mLat = m.lat ?? m.latitude;
-          const mLon = m.lon ?? m.longitude;
-          if (mLat == null || mLon == null) continue;
-          const d = Math.hypot(mLat - lat, mLon - lon);
-          if (d < minDist) { minDist = d; closest = m; }
-        }
-        if (closest) return { metar: closest, station: closest.stationId || closest.icaoId || '?' };
-      } catch(e) { continue; }
-    }
-    // 2. Fallback to known NC area stations
+    // Direct station lookup — hardcoded NC area stations as primary approach
     const fallbackRes = await fetch('https://aviationweather.gov/api/data/metar?ids=KJNX,KFAY,KRDU,KFQD&format=json&taf=false&hours=2');
     if (fallbackRes.ok) {
       const fallbacks = await fallbackRes.json();
       if (fallbacks && fallbacks.length > 0) {
-        let closest = null, minDist = Infinity;
+        // Just use the first one with cloud data
         for (const m of fallbacks) {
-          const mLat = m.lat ?? m.latitude;
-          const mLon = m.lon ?? m.longitude;
-          if (mLat == null || mLon == null) continue;
-          const d = Math.hypot(mLat - lat, mLon - lon);
-          if (d < minDist) { minDist = d; closest = m; }
+          if (m.clouds && m.clouds.length > 0) {
+            return { metar: m, station: m.stationId || m.icaoId || 'KJNX' };
+          }
         }
-        if (closest) return { metar: closest, station: closest.stationId || closest.icaoId || 'KJNX' };
+        // No cloud data but still return first result
+        return { metar: fallbacks[0], station: fallbacks[0].stationId || fallbacks[0].icaoId || 'KJNX' };
       }
     }
-    return null;
   } catch (e) {
-    console.warn('METAR fetch failed:', e);
-    return null;
+    console.warn('METAR station lookup failed:', e.message);
   }
+
+  try {
+    // Bbox fallback
+    const bbox = `${lon-2},${lat-2},${lon+2},${lat+2}`;
+    const bboxRes = await fetch(`https://aviationweather.gov/api/data/metar?bbox=${bbox}&format=json&taf=false&hours=2`);
+    if (bboxRes.ok) {
+      const metars = await bboxRes.json();
+      if (metars && metars.length > 0) {
+        return { metar: metars[0], station: metars[0].stationId || metars[0].icaoId || '?' };
+      }
+    }
+  } catch (e) {
+    console.warn('METAR bbox failed:', e.message);
+  }
+
+  return null;
 }
 
 function parseCeiling(metar) {
