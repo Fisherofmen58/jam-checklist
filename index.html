@@ -709,8 +709,10 @@ function windColor(mph) {
 
 function windArrow(deg) {
   // Arrow points the direction wind is GOING (blowing toward)
-  const dirs = ['↓','↙','←','↖','↑','↗','→','↘','↓'];
-  const idx = Math.round(((deg + 180) % 360) / 45);
+  // dirs indexed by compass direction: N=↑, NE=↗, E=→, SE=↘, S=↓, SW=↙, W=←, NW=↖
+  const dirs = ['↑','↗','→','↘','↓','↙','←','↖','↑'];
+  const goingTo = (deg + 180) % 360;
+  const idx = Math.round(goingTo / 45) % 8;
   return dirs[idx];
 }
 function ceilingColor(ft) {
