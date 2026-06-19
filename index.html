@@ -729,20 +729,25 @@ async function fetchKP() {
 }
 
 async function fetchMetar(lat, lon) {
-  // Find nearest station then fetch METAR
-  const stationRes = await fetch(`https://aviationweather.gov/api/data/station?bbox=${lat-1},${lon-1},${lat+1},${lon+1}&format=json`);
-  const stations = await stationRes.json();
-  if (!stations || stations.length === 0) return null;
-  // Pick closest station
-  let closest = null, minDist = Infinity;
-  for (const s of stations) {
-    const d = Math.hypot(s.lat - lat, s.lon - lon);
-    if (d < minDist) { minDist = d; closest = s; }
+  try {
+    const stationRes = await fetch(`https://aviationweather.gov/api/data/station?bbox=${lat-1},${lon-1},${lat+1},${lon+1}&format=json`);
+    if (!stationRes.ok) return null;
+    const stations = await stationRes.json();
+    if (!stations || stations.length === 0) return null;
+    let closest = null, minDist = Infinity;
+    for (const s of stations) {
+      const d = Math.hypot(s.lat - lat, s.lon - lon);
+      if (d < minDist) { minDist = d; closest = s; }
+    }
+    if (!closest) return null;
+    const metarRes = await fetch(`https://aviationweather.gov/api/data/metar?ids=${closest.stationIdentifier}&format=json&taf=false`);
+    if (!metarRes.ok) return null;
+    const metars = await metarRes.json();
+    return metars && metars.length > 0 ? { metar: metars[0], station: closest.stationIdentifier } : null;
+  } catch (e) {
+    console.warn('METAR fetch failed:', e);
+    return null;
   }
-  if (!closest) return null;
-  const metarRes = await fetch(`https://aviationweather.gov/api/data/metar?ids=${closest.stationIdentifier}&format=json&taf=false`);
-  const metars = await metarRes.json();
-  return metars && metars.length > 0 ? { metar: metars[0], station: closest.stationIdentifier } : null;
 }
 
 function parseCeiling(metar) {
@@ -799,13 +804,17 @@ async function loadWeather() {
   navigator.geolocation.getCurrentPosition(async (pos) => {
     const { latitude: lat, longitude: lon } = pos.coords;
     try {
-      const [wxRes, kpData, metarData] = await Promise.all([
+      const [wxRes, kpData, metarData] = await Promise.allSettled([
         fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${OWM_KEY}`),
         fetchKP(),
         fetchMetar(lat, lon)
       ]);
-      const wx = await wxRes.json();
+
+      if (wxRes.status === 'rejected') throw new Error('Weather API unreachable');
+      const wx = await wxRes.value.json();
       if (wx.cod !== 200) throw new Error(wx.message);
+      const kpData2 = kpData.status === 'fulfilled' ? kpData.value : null;
+      const metarData2 = metarData.status === 'fulfilled' ? metarData.value : null;
 
       const windMph = Math.round(wx.wind.speed);
       const gustMph = wx.wind.gust ? Math.round(wx.wind.gust) : null;
@@ -815,16 +824,16 @@ async function loadWeather() {
 
       // Ceiling from METAR
       let ceilFt = null, ceilNote = 'No METAR data', ceilClass = 'wx-good', ceilTxt = '—', stationId = '';
-      if (metarData) {
-        stationId = metarData.station;
-        const m = metarData.metar;
+      if (metarData2) {
+        stationId = metarData2.station;
+        const m = metarData2.metar;
         ceilFt = parseCeiling(m);
         ceilTxt = ceilingText(ceilFt, m.clouds);
         ceilNote = ceilingNote(ceilFt, m.clouds);
         ceilClass = ceilingColor(ceilFt);
       }
 
-      const kp = kpData;
+      const kp = kpData2;
       const kpVal = kp !== null ? kp.toFixed(1) : '—';
       const kpClass = kp !== null ? kpColor(kp) : '';
       const kpNote = kp >= 5 ? '⛔ High — interference risk' : kp >= 3 ? '⚠️ Elevated' : 'Normal';
