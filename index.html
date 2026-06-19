@@ -193,7 +193,7 @@
   <div class="header-top">
     <div>
       <h1>Johnston Aerial</h1>
-      <p>Mission Flight Checklists · Part 107 Certified · v1.3</p>
+      <p>Mission Flight Checklists · Part 107 Certified · v1.4</p>
     </div>
     <button class="reset-all" onclick="resetCurrent()">Reset</button>
   </div>
@@ -697,7 +697,7 @@ const OWM_KEY = 'efe9a970e8359eb76af1c57a288af3ed';
 // ────────────────────────────────────────────────────────────────────
 
 function kpColor(kp) {
-  if (kp >= 5) return 'wx-alert';
+  if (kp >= 4) return 'wx-alert';
   if (kp >= 3) return 'wx-warn';
   return 'wx-good';
 }
@@ -722,16 +722,26 @@ function ceilingColor(ft) {
 }
 
 async function fetchKP() {
-  try {
-    const res = await fetch('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
-    const data = await res.json();
-    // Skip header row, find last row with a valid numeric value
-    for (let i = data.length - 1; i >= 1; i--) {
-      const val = parseFloat(data[i][1]);
-      if (!isNaN(val)) return val;
-    }
-    return null;
-  } catch { return null; }
+  const urls = [
+    'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json',
+    'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!data || data.length === 0) continue;
+      for (let i = data.length - 1; i >= 0; i--) {
+        const entry = data[i];
+        // 1m format has kp_index field; 3hr format is array with value at index 1
+        const raw = entry.kp_index ?? (Array.isArray(entry) ? entry[1] : null);
+        const kp = parseFloat(raw);
+        if (!isNaN(kp)) return kp;
+      }
+    } catch(e) { continue; }
+  }
+  return null;
 }
 
 const CHECKWX_KEY = '86cfb5b4723c4046bb3f598777eadfc0';
@@ -849,7 +859,7 @@ async function loadWeather() {
       const kp = kpData2;
       const kpVal = kp !== null ? kp.toFixed(1) : '—';
       const kpClass = kp !== null ? kpColor(kp) : '';
-      const kpNote = kp >= 5 ? '⛔ High — interference risk' : kp >= 3 ? '⚠️ Elevated' : 'Normal';
+      const kpNote = kp >= 4 ? '⛔ High — GPS/compass risk' : kp >= 3 ? '⚠️ Elevated — monitor' : 'Normal — good to fly';
 
       const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
