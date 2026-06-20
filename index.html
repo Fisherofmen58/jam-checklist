@@ -183,9 +183,10 @@
   .wx-key-prompt a { color: var(--blue-mid); }
   .wx-updated { font-size: 10px; color: var(--text-light); text-align: right; margin-top: 8px; }
   .wx-sun { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 8px; }
-  .wx-tfr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .wx-tfr-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
   .wx-tfr { display: block; width: 100%; padding: 9px; background: #c0392b; color: white; border: none; border-radius: 10px; font-size: 12px; font-weight: 700; text-align: center; text-decoration: none; letter-spacing: 0.3px; cursor: pointer; box-sizing: border-box; }
   .wx-notam { display: block; width: 100%; padding: 9px; background: #7f3fbf; color: white; border: none; border-radius: 10px; font-size: 12px; font-weight: 700; text-align: center; text-decoration: none; letter-spacing: 0.3px; cursor: pointer; box-sizing: border-box; }
+  .wx-radar { display: block; width: 100%; padding: 9px; background: #1a6b3c; color: white; border: none; border-radius: 10px; font-size: 12px; font-weight: 700; text-align: center; text-decoration: none; letter-spacing: 0.3px; cursor: pointer; box-sizing: border-box; }
 </style>
 </head>
 <body>
@@ -194,7 +195,7 @@
   <div class="header-top">
     <div>
       <h1>Johnston Aerial</h1>
-      <p>Mission Flight Checklists · Part 107 Certified · v2.4</p>
+      <p>Mission Flight Checklists · Part 107 Certified · v2.5</p>
     </div>
     <button class="reset-all" onclick="resetCurrent()">Reset</button>
   </div>
@@ -924,6 +925,7 @@ async function loadWeather() {
         <div class="wx-tfr-row">
           <a class="wx-tfr" href="https://tfr.faa.gov/tfr2/list.html" target="_blank">⚠️ TFRs — FAA.gov</a>
           <a class="wx-notam" href="https://notams.aim.faa.gov/notamSearch/" target="_blank">📋 NOTAMs — AIM</a>
+          <a class="wx-radar" href="https://radar.weather.gov" target="_blank">🌧 Radar — NWS</a>
         </div>
       `;
     } catch (e) {
