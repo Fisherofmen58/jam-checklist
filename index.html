@@ -193,7 +193,7 @@
   <div class="header-top">
     <div>
       <h1>Johnston Aerial</h1>
-      <p>Mission Flight Checklists · Part 107 Certified · v1.4</p>
+      <p>Mission Flight Checklists · Part 107 Certified · v1.5</p>
     </div>
     <button class="reset-all" onclick="resetCurrent()">Reset</button>
   </div>
@@ -723,8 +723,8 @@ function ceilingColor(ft) {
 
 async function fetchKP() {
   const urls = [
-    'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json',
-    'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'
+    'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',
+    'https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'
   ];
   for (const url of urls) {
     try {
@@ -734,7 +734,6 @@ async function fetchKP() {
       if (!data || data.length === 0) continue;
       for (let i = data.length - 1; i >= 0; i--) {
         const entry = data[i];
-        // 1m format has kp_index field; 3hr format is array with value at index 1
         const raw = entry.kp_index ?? (Array.isArray(entry) ? entry[1] : null);
         const kp = parseFloat(raw);
         if (!isNaN(kp)) return kp;
