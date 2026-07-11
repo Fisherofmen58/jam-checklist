@@ -738,8 +738,12 @@ function resetCurrent() {
 </script>
 
 <script>
-// ── PASTE YOUR OPENWEATHERMAP API KEY HERE ──────────────────────────
-const OWM_KEY = 'efe9a970e8359eb76af1c57a288af3ed';
+/* ---------------------------------------------------------------------
+   Weather data now comes from a Cloudflare Worker proxy — no API keys
+   live in this file or ship to the browser. See worker.js / setup notes
+   for how to deploy the proxy and get its URL.
+--------------------------------------------------------------------- */
+const WORKER_URL = 'https://ja-checklist-weather.fisherofmen58.workers.dev';
 // ────────────────────────────────────────────────────────────────────
 
 function kpColor(kp) {
@@ -776,13 +780,11 @@ function ceilingColor(ft) {
 
 async function fetchKP() {
   try {
-    // 1-minute estimated feed — confirmed working via CORS
+    // 1-minute estimated feed — confirmed working via CORS, no key needed
     const res = await fetch('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json');
     if (!res.ok) throw new Error('failed');
     const data = await res.json();
     if (!data || data.length === 0) throw new Error('no data');
-    // Take the maximum KP from the last 20 entries (last ~20 minutes)
-    // to avoid low transient readings
     const recent = data.slice(-20);
     let maxKp = null;
     for (const entry of recent) {
@@ -790,7 +792,6 @@ async function fetchKP() {
       if (!isNaN(kp) && (maxKp === null || kp > maxKp)) maxKp = kp;
     }
     if (maxKp !== null && maxKp > 0) return maxKp;
-    // If all zeros, go back further
     for (let i = data.length - 1; i >= 0; i--) {
       const kp = parseFloat(data[i].kp_index);
       if (!isNaN(kp) && kp > 0) return kp;
@@ -799,30 +800,24 @@ async function fetchKP() {
   return null;
 }
 
-const CHECKWX_KEY = '86cfb5b4723c4046bb3f598777eadfc0';
-
 async function fetchMetar(lat, lon) {
   try {
-    const res = await fetch(`https://api.checkwx.com/metar/lat/${lat}/lon/${lon}/decoded`, {
-      headers: { 'X-API-Key': CHECKWX_KEY }
-    });
-    if (!res.ok) throw new Error('CheckWX error: ' + res.status);
+    const res = await fetch(`${WORKER_URL}/metar?lat=${lat}&lon=${lon}`);
+    if (!res.ok) throw new Error('Weather proxy error: ' + res.status);
     const data = await res.json();
     if (!data.data || data.data.length === 0) return null;
     const m = data.data[0];
     return { metar: m, station: m.icao || '?' };
   } catch (e) {
-    console.warn('CheckWX METAR failed:', e.message);
+    console.warn('METAR fetch failed:', e.message);
     return null;
   }
 }
 
 function parseCeiling(metar) {
-  // CheckWX provides a direct ceiling field
   if (metar.ceiling && metar.ceiling.feet_agl != null) {
     return metar.ceiling.feet_agl;
   }
-  // Fallback: scan clouds for lowest BKN or OVC
   const clouds = metar.clouds || [];
   let ceiling = null;
   for (const layer of clouds) {
@@ -869,8 +864,8 @@ async function loadWeather() {
   const body = document.getElementById('wx-body');
   body.innerHTML = '<div class="wx-status">Loading...</div>';
 
-  if (!OWM_KEY || OWM_KEY === 'YOUR_API_KEY_HERE') {
-    body.innerHTML = `<div class="wx-key-prompt">⚠️ Add your OpenWeatherMap API key to enable live weather.<br><a href="https://openweathermap.org/api" target="_blank">Sign up free at openweathermap.org</a></div>`;
+  if (!WORKER_URL || WORKER_URL.includes('YOUR-WORKER-NAME')) {
+    body.innerHTML = `<div class="wx-key-prompt">⚠️ Set WORKER_URL to your deployed Cloudflare Worker to enable live weather.</div>`;
     return;
   }
 
@@ -883,12 +878,12 @@ async function loadWeather() {
     const { latitude: lat, longitude: lon } = pos.coords;
     try {
       const [wxRes, kpData, metarData] = await Promise.allSettled([
-        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${OWM_KEY}`),
+        fetch(`${WORKER_URL}/weather?lat=${lat}&lon=${lon}`),
         fetchKP(),
         fetchMetar(lat, lon)
       ]);
 
-      if (wxRes.status === 'rejected') throw new Error('Weather API unreachable');
+      if (wxRes.status === 'rejected') throw new Error('Weather proxy unreachable');
       const wx = await wxRes.value.json();
       if (wx.cod !== 200) throw new Error(wx.message);
       const kpData2 = kpData.status === 'fulfilled' ? kpData.value : null;
