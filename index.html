@@ -768,8 +768,9 @@ function resetCurrent() {
 </script>
 
 <script>
-// ── PASTE YOUR OPENWEATHERMAP API KEY HERE ──────────────────────────
-const OWM_KEY = '75af101b086f9489ef7601ece307c361';
+// ── Weather/METAR requests are proxied through a Cloudflare Worker ──
+// so API keys stay server-side and never appear in this page's source.
+const WORKER_BASE = 'https://ja-checklist-weather.fisherofmen58.workers.dev';
 // ────────────────────────────────────────────────────────────────────
 
 function kpColor(kp) {
@@ -829,13 +830,9 @@ async function fetchKP() {
   return null;
 }
 
-const CHECKWX_KEY = '86cfb5b4723c4046bb3f598777eadfc0';
-
 async function fetchMetar(lat, lon) {
   try {
-    const res = await fetch(`https://api.checkwx.com/metar/lat/${lat}/lon/${lon}/decoded`, {
-      headers: { 'X-API-Key': CHECKWX_KEY }
-    });
+    const res = await fetch(`${WORKER_BASE}/metar?lat=${lat}&lon=${lon}`);
     if (!res.ok) throw new Error('CheckWX error: ' + res.status);
     const data = await res.json();
     if (!data.data || data.data.length === 0) return null;
@@ -899,8 +896,8 @@ async function loadWeather() {
   const body = document.getElementById('wx-body');
   body.innerHTML = '<div class="wx-status">Loading...</div>';
 
-  if (!OWM_KEY || OWM_KEY === 'YOUR_API_KEY_HERE') {
-    body.innerHTML = `<div class="wx-key-prompt">⚠️ Add your OpenWeatherMap API key to enable live weather.<br><a href="https://openweathermap.org/api" target="_blank">Sign up free at openweathermap.org</a></div>`;
+  if (!WORKER_BASE || WORKER_BASE.includes('YOUR-SUBDOMAIN')) {
+    body.innerHTML = `<div class="wx-key-prompt">⚠️ Weather proxy not configured. Set WORKER_BASE to your deployed Cloudflare Worker URL.</div>`;
     return;
   }
 
@@ -913,7 +910,7 @@ async function loadWeather() {
     const { latitude: lat, longitude: lon } = pos.coords;
     try {
       const [wxRes, kpData, metarData] = await Promise.allSettled([
-        fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${OWM_KEY}`),
+        fetch(`${WORKER_BASE}/weather?lat=${lat}&lon=${lon}`),
         fetchKP(),
         fetchMetar(lat, lon)
       ]);
