@@ -1305,6 +1305,11 @@ async function renderWeather(lat, lon) {
         </div>
         <div class="wx-sun">🌅 Sunrise ${fmtT(wx.sunrise)} &nbsp;·&nbsp; 🌇 Sunset ${fmtT(wx.sunset)}</div>
         <div class="wx-updated" id="wx-updated">Updated ${now} · ${stationId ? 'METAR ' + stationId : lat.toFixed(2) + ', ' + lon.toFixed(2)}<span id="wx-age"></span></div>
+        <div class="wx-tfr-row">
+          <a class="wx-tfr" href="https://tfr.faa.gov/tfr2/list.html" target="_blank">⚠️ TFRs — FAA.gov</a>
+          <a class="wx-notam" href="https://notams.aim.faa.gov/notamSearch/" target="_blank">📋 NOTAMs — AIM</a>
+          <a class="wx-radar" href="https://radar.weather.gov" target="_blank">🌧 Radar — NWS</a>
+        </div>
         `;
         refreshAge();
       };
