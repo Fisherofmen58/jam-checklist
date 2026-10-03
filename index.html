@@ -845,6 +845,16 @@ function restoreProgress() {
   if (n) restoredAt = data.savedAt;
 }
 
+function nwsRadarUrl(lat, lon) {
+  // NWS radar page opens centered on the chosen location (settings are base64 JSON)
+  try {
+    const s = { agenda: { id: 'weather', center: [+lon.toFixed(3), +lat.toFixed(3)], location: [+lon.toFixed(3), +lat.toFixed(3)], zoom: 8, layer: 'bref_qcd' },
+      animating: false, base: 'standard', artcc: false, county: false, cwa: false, rfc: false, state: false, menu: true, shortFusedOnly: false,
+      opacity: { alerts: 0.8, local: 0.6, localStations: 0.8, national: 0.6 } };
+    return 'https://radar.weather.gov/?settings=v1_' + btoa(JSON.stringify(s));
+  } catch (e) { return 'https://radar.weather.gov'; }
+}
+
 function ageText(ms) {
   const m = Math.floor(ms / 60000);
   if (m < 1) return 'just now';
@@ -1594,6 +1604,7 @@ async function renderWeather(lat, lon) {
           <a class="wx-radar" href="https://radar.weather.gov" target="_blank">🌧 Radar — NWS</a>
         </div>
         `;
+        document.querySelectorAll('.wx-radar').forEach(a => { a.href = nwsRadarUrl(lat, lon); });
         refreshAge();
       };
       lastDraw = draw;
